@@ -184,3 +184,21 @@ Estructura de paquete estándar:
 ```bash
 uv run pytest -v
 ```
+
+---
+
+## 📦 Empaquetado para Chrome y Firefox
+
+Para empaquetar la extensión lista para cargar o distribuir:
+
+```bash
+uv run slide-tools pack
+```
+
+Opciones:
+- `--target` / `-t`: `both` (por defecto), `chrome` o `firefox`.
+- `--out-dir` / `-o`: Directorio de salida (por defecto `dist/`).
+
+Archivos generados en `dist/`:
+- **`slide-bridge-chrome-v1.2.0.zip`**: Manifiesto con `background.service_worker` para Chromium.
+- **`slide-bridge-firefox-v1.2.0.xpi`**: Manifiesto con `background.scripts` y `browser_specific_settings.gecko` para Firefox MV3.
