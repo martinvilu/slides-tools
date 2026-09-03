@@ -192,32 +192,49 @@
     h3.textContent = "Emparejamiento Remoto";
 
     const pinDesc = document.createElement("p");
-    pinDesc.innerHTML = `Ingresá el PIN: <strong style="color: #fbbc04; font-size: 18px;">${currentPin}</strong>`;
+    pinDesc.textContent = "Ingresá el PIN: ";
+    const pinStrong = document.createElement("strong");
+    pinStrong.style.color = "#fbbc04";
+    pinStrong.style.fontSize = "18px";
+    pinStrong.textContent = currentPin;
+    pinDesc.appendChild(pinStrong);
 
     const box = document.createElement("div");
     box.className = "slide-bridge-qr-code-box";
-    // Renderizado simple de código QR / SVG con datos de conexión
-    box.innerHTML = `
-      <svg viewBox="0 0 100 100" width="160" height="160">
-        <rect width="100" height="100" fill="#ffffff"/>
-        <rect x="10" y="10" width="30" height="30" fill="#000000"/>
-        <rect x="15" y="15" width="20" height="20" fill="#ffffff"/>
-        <rect x="20" y="20" width="10" height="10" fill="#000000"/>
-        <rect x="60" y="10" width="30" height="30" fill="#000000"/>
-        <rect x="65" y="15" width="20" height="20" fill="#ffffff"/>
-        <rect x="70" y="20" width="10" height="10" fill="#000000"/>
-        <rect x="10" y="60" width="30" height="30" fill="#000000"/>
-        <rect x="15" y="65" width="20" height="20" fill="#ffffff"/>
-        <rect x="20" y="70" width="10" height="10" fill="#000000"/>
-        <rect x="50" y="50" width="10" height="10" fill="#000000"/>
-        <rect x="65" y="65" width="15" height="15" fill="#000000"/>
-      </svg>
-    `;
+    const qrSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    qrSvg.setAttribute("viewBox", "0 0 100 100");
+    qrSvg.setAttribute("width", "160");
+    qrSvg.setAttribute("height", "160");
+
+    const addRect = (x, y, w, h, fill) => {
+      const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      r.setAttribute("x", x);
+      r.setAttribute("y", y);
+      r.setAttribute("width", w);
+      r.setAttribute("height", h);
+      r.setAttribute("fill", fill);
+      qrSvg.appendChild(r);
+    };
+
+    addRect("0", "0", "100", "100", "#ffffff");
+    addRect("10", "10", "30", "30", "#000000");
+    addRect("15", "15", "20", "20", "#ffffff");
+    addRect("20", "20", "10", "10", "#000000");
+    addRect("60", "10", "30", "30", "#000000");
+    addRect("65", "15", "20", "20", "#ffffff");
+    addRect("70", "20", "10", "10", "#000000");
+    addRect("10", "60", "30", "30", "#000000");
+    addRect("15", "65", "20", "20", "#ffffff");
+    addRect("20", "70", "10", "10", "#000000");
+    addRect("50", "50", "10", "10", "#000000");
+    addRect("65", "65", "15", "15", "#000000");
+    box.appendChild(qrSvg);
 
     const closeBtn = document.createElement("button");
     closeBtn.className = "slide-bridge-close-btn";
     closeBtn.textContent = "Cerrar";
     closeBtn.onclick = () => modalBackdrop.remove();
+
 
     modal.appendChild(h3);
     modal.appendChild(pinDesc);

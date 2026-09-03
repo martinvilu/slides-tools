@@ -137,21 +137,45 @@
     speakerDockElement.className = "slide-bridge-speaker-dock";
     speakerDockElement.id = "slide-bridge-speaker-dock";
 
-    speakerDockElement.innerHTML = `
-      <div class="left-group">
-        <span class="slide-bridge-dot ${daemonConnected ? "" : "disconnected"}" id="speaker-bridge-dot"></span>
-        <strong>Google Slides Bridge</strong>
-        <span style="color: #9aa0a6;">| Vista de Orador</span>
-      </div>
-      <div class="right-group">
-        <span id="speaker-bridge-clients">${currentClientsCount} disp. conectados</span>
-        <span class="slide-bridge-pin-badge" id="speaker-bridge-pin">PIN: ${currentPin}</span>
-      </div>
-    `;
+    const leftGroup = document.createElement("div");
+    leftGroup.className = "left-group";
+
+    const dot = document.createElement("span");
+    dot.className = `slide-bridge-dot ${daemonConnected ? "" : "disconnected"}`;
+    dot.id = "speaker-bridge-dot";
+
+    const titleStrong = document.createElement("strong");
+    titleStrong.textContent = "Google Slides Bridge";
+
+    const subtitleSpan = document.createElement("span");
+    subtitleSpan.style.color = "#9aa0a6";
+    subtitleSpan.textContent = "| Vista de Orador";
+
+    leftGroup.appendChild(dot);
+    leftGroup.appendChild(titleStrong);
+    leftGroup.appendChild(subtitleSpan);
+
+    const rightGroup = document.createElement("div");
+    rightGroup.className = "right-group";
+
+    const clientsSpan = document.createElement("span");
+    clientsSpan.id = "speaker-bridge-clients";
+    clientsSpan.textContent = `${currentClientsCount} disp. conectados`;
+
+    const pinBadge = document.createElement("span");
+    pinBadge.className = "slide-bridge-pin-badge";
+    pinBadge.id = "speaker-bridge-pin";
+    pinBadge.textContent = `PIN: ${currentPin}`;
+
+    rightGroup.appendChild(clientsSpan);
+    rightGroup.appendChild(pinBadge);
+
+    speakerDockElement.appendChild(leftGroup);
+    speakerDockElement.appendChild(rightGroup);
 
     document.body.prepend(speakerDockElement);
-    // Ajustar padding superior del cuerpo para que no tape los controles
     document.body.style.paddingTop = "38px";
+
   }
 
   function updateSpeakerDockUI() {
