@@ -9,6 +9,13 @@ from typing import Any, Dict, Optional, Set
 import websockets
 from websockets.asyncio.server import Server, serve
 
+from slide_tools.discovery import (
+    MdnsPublisher,
+    build_pairing_uri,
+    generate_qr_ascii,
+    generate_qr_svg,
+    get_local_ip,
+)
 from slide_tools.protocol import (
     Action,
     ErrorCode,
@@ -46,12 +53,33 @@ class SlideDaemon:
         pin: Optional[str] = None,
         require_pin: bool = True,
         command_timeout: float = 2.5,
+        enable_mdns: bool = True,
     ):
         self.host = host
         self.port = port
         self.pin = pin or f"{random.randint(1000, 9999)}"
         self.require_pin = require_pin
         self.command_timeout = command_timeout
+        self.enable_mdns = enable_mdns
+
+        self.lan_ip = get_local_ip() if self.host in ("0.0.0.0", "") else self.host
+        self.pairing_uri = build_pairing_uri("slides", self.lan_ip, self.port, self.pin)
+        self.qr_ascii = generate_qr_ascii(self.pairing_uri)
+        self.qr_svg = generate_qr_svg(self.pairing_uri)
+
+        self._mdns_publisher: Optional[MdnsPublisher] = None
+        if self.enable_mdns and self.port > 0:
+            self._mdns_publisher = MdnsPublisher(
+                service_name=f"SlideBridge-{self.pin}",
+                service_type="_slide-bridge._tcp.local.",
+                port=self.port,
+                properties={
+                    "service": "slides",
+                    "version": "1.2.0",
+                    "requires_pin": "1" if self.require_pin else "0",
+                },
+                host_ip=self.lan_ip,
+            )
 
         self._server: Optional[Server] = None
         self._extension_ws: Optional[Any] = None
@@ -70,6 +98,8 @@ class SlideDaemon:
             speakerNotes=SpeakerNotesData(),
             connectedClients=0,
             pin=self.pin,
+            pairingUri=self.pairing_uri,
+            qrSvg=self.qr_svg,
         )
 
         # Temporizador emulado (para fallback cuando no hay vista de orador)
@@ -83,14 +113,18 @@ class SlideDaemon:
         return sum(1 for c in self._clients.values() if c.is_paired and c.device_type != "extension")
 
     async def start(self) -> None:
-        """Inicia el servidor WebSocket."""
+        """Inicia el servidor WebSocket y el servicio mDNS."""
         logger.info(f"Iniciando SlideDaemon en ws://{self.host}:{self.port} (PIN: {self.pin})")
         self._server = await serve(self._handle_connection, self.host, self.port)
         self._fallback_timer_task = asyncio.create_task(self._fallback_timer_loop())
+        if self._mdns_publisher:
+            await self._mdns_publisher.start()
 
     async def stop(self) -> None:
-        """Detiene el servidor y limpia conexiones."""
+        """Detiene el servidor, mDNS y limpia conexiones."""
         logger.info("Deteniendo SlideDaemon...")
+        if self._mdns_publisher:
+            await self._mdns_publisher.stop()
         if self._fallback_timer_task:
             self._fallback_timer_task.cancel()
             try:
@@ -161,6 +195,8 @@ class SlideDaemon:
                 incoming_payload = dict(msg.payload)
                 incoming_payload["pin"] = self.pin
                 incoming_payload["connectedClients"] = self.paired_clients_count
+                incoming_payload["pairingUri"] = self.pairing_uri
+                incoming_payload["qrSvg"] = self.qr_svg
                 self.state = StateSyncPayload(**incoming_payload)
                 # Difundir a los clientes, sin rebotarle su propio sync a la extensión
                 await self._broadcast_state(exclude_ws=websocket)

@@ -31,6 +31,8 @@ def daemon(
     port: int = typer.Option(8766, "--port", "-p", help="Puerto TCP WebSocket"),
     pin: Optional[str] = typer.Option(None, "--pin", help="PIN de 4 dígitos fijo (si se omite, se genera aleatorio)"),
     no_pin: bool = typer.Option(False, "--no-pin", help="Desactivar requerimiento de PIN (modo permisivo)"),
+    no_mdns: bool = typer.Option(False, "--no-mdns", help="Desactivar publicación mDNS/Zeroconf"),
+    no_qr: bool = typer.Option(False, "--no-qr", help="Ocultar código QR en la consola"),
     timeout: float = typer.Option(2.5, "--timeout", "-t", help="Timeout de respuesta de extensión"),
 ):
     """Inicia el daemon concentrador WebSocket en primer plano."""
@@ -39,16 +41,30 @@ def daemon(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
 
-    server = SlideDaemon(host=host, port=port, pin=pin, require_pin=not no_pin, command_timeout=timeout)
+    server = SlideDaemon(
+        host=host,
+        port=port,
+        pin=pin,
+        require_pin=not no_pin,
+        command_timeout=timeout,
+        enable_mdns=not no_mdns,
+    )
 
+    mdns_info = "[bold green]Activo[/bold green] (_slide-bridge._tcp.local.)" if not no_mdns else "[dim]Desactivado[/dim]"
     console.print(Panel.fit(
         f"[bold cyan]Slide Daemon Concentrador v1.2[/bold cyan]\n"
         f"Escuchando en: [bold green]ws://{host}:{port}[/bold green]\n"
         f"PIN de Emparejamiento: [bold yellow]{server.pin}[/bold yellow] {'(Opcional)' if no_pin else '(Requerido)'}\n"
-        f"Conexión Loopback: [dim]ws://127.0.0.1:{port}[/dim]\n"
-        f"Conexión LAN: [dim]ws://<IP_LOCAL>:{port}[/dim]",
+        f"Descubrimiento mDNS: {mdns_info}\n"
+        f"Conexión LAN: [dim]ws://{server.lan_ip}:{port}[/dim]\n"
+        f"URI Emparejamiento: [cyan]{server.pairing_uri}[/cyan]",
         border_style="cyan"
     ))
+
+    if not no_qr:
+        console.print("[dim]Escaneá este código QR desde la app Android para conectar directo:[/dim]")
+        console.print(server.qr_ascii)
+        console.print("")
 
     async def _run():
         await server.start()
@@ -372,6 +388,21 @@ def sign(
             console.print(f"[bold green]✓ Addon firmado exitosamente:[/bold green] [cyan]{res['signed_file']}[/cyan]")
     except Exception as e:
         console.print(f"[bold red]Error durante firma con web-ext:[/bold red] {e}")
+
+
+@app.command()
+def qr(
+    port: int = typer.Option(8766, "--port", "-p", help="Puerto TCP WebSocket"),
+    pin: str = typer.Option(..., "--pin", help="PIN de emparejamiento"),
+    host: Optional[str] = typer.Option(None, "--host", "-h", help="IP anfitrión (si se omite, se detecta automáticamente)"),
+):
+    """Muestra el código QR para emparejamiento directo con la app Android."""
+    from slide_tools.discovery import build_pairing_uri, generate_qr_ascii, get_local_ip
+    lan_ip = host or get_local_ip()
+    uri = build_pairing_uri("slides", lan_ip, port, pin)
+    console.print(f"[bold cyan]URI de Emparejamiento Directo:[/bold cyan] [yellow]{uri}[/yellow]\n")
+    console.print(generate_qr_ascii(uri))
+    console.print("")
 
 
 def main():

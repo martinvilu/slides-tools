@@ -91,6 +91,8 @@ class StateSyncPayload(BaseModel):
     speakerNotes: SpeakerNotesData = Field(default_factory=SpeakerNotesData)
     connectedClients: int = 0
     pin: str = ""
+    pairingUri: Optional[str] = None
+    qrSvg: Optional[str] = None
 
 
 class PairRequestPayload(BaseModel):
