@@ -44,3 +44,4 @@ def test_package_slide_extension(tmp_path):
         assert ff_manifest["background"]["scripts"] == ["background.js"]
         assert "browser_specific_settings" in ff_manifest
         assert ff_manifest["browser_specific_settings"]["gecko"]["id"] == "slide-bridge@local.dev"
+        assert ff_manifest["browser_specific_settings"]["gecko"]["data_collection_permissions"]["required"] == ["none"]
