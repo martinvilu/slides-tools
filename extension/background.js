@@ -3,7 +3,9 @@
  * Versión 1.2
  */
 
-const DAEMON_WS_URL = "ws://127.0.0.1:8766";
+let daemonHost = "127.0.0.1";
+let daemonPort = 8766;
+let daemonPin = "";
 const RECONNECT_INTERVAL_MS = 3000;
 
 let ws = null;
@@ -24,8 +26,9 @@ let currentSessionState = {
 };
 
 function connectWebSocket() {
+  const wsUrl = `ws://${daemonHost}:${daemonPort}`;
   try {
-    ws = new WebSocket(DAEMON_WS_URL);
+    ws = new WebSocket(wsUrl);
   } catch (err) {
     setTimeout(connectWebSocket, RECONNECT_INTERVAL_MS);
     return;
@@ -33,7 +36,25 @@ function connectWebSocket() {
 
   ws.onopen = () => {
     isConnected = true;
-    console.log("[SlideBridge] Conectado al daemon en", DAEMON_WS_URL);
+    console.log("[SlideBridge] Conectado al daemon en", wsUrl);
+
+    // Si hay PIN configurado, solicitar emparejamiento
+    if (daemonPin) {
+      const pairMsg = {
+        version: "1.2",
+        sessionId: "default",
+        source: "extension",
+        type: "command",
+        action: "PAIR_REQUEST",
+        payload: {
+          pin: daemonPin,
+          deviceType: "extension",
+          clientName: "Google Slides Extension"
+        }
+      };
+      ws.send(JSON.stringify(pairMsg));
+    }
+
     // Enviar estado inicial
     sendStateSync();
     notifyTabsConnectionStatus(true);
@@ -166,11 +187,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GET_DAEMON_INFO") {
     sendResponse({
       isConnected: isConnected,
-      pin: currentSessionState.pin,
+      pin: currentSessionState.pin || daemonPin,
       clientsCount: currentSessionState.connectedClients
     });
     return true;
   }
+  if (message.type === "GET_CONFIG_STATUS") {
+    sendResponse({
+      isConnected: isConnected,
+      host: daemonHost,
+      port: daemonPort,
+      pin: daemonPin,
+      clientsCount: currentSessionState.connectedClients
+    });
+    return true;
+  }
+  if (message.type === "CONFIG_UPDATED") {
+    daemonHost = message.host || daemonHost;
+    daemonPort = parseInt(message.port, 10) || daemonPort;
+    daemonPin = message.pin !== undefined ? String(message.pin).trim() : daemonPin;
+    console.log("[SlideBridge] Nueva configuración recibida. Reconectando a", daemonHost, daemonPort);
+    if (ws) ws.close();
+    sendResponse({ status: "ok" });
+    return true;
+  }
 });
 
-connectWebSocket();
+function loadConfigAndConnect() {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get(["daemonHost", "daemonPort", "daemonPin"], (res) => {
+      if (chrome.runtime.lastError || !res) {
+        connectWebSocket();
+        return;
+      }
+      if (res.daemonHost) daemonHost = res.daemonHost.trim();
+      if (res.daemonPort) daemonPort = parseInt(res.daemonPort, 10);
+      if (res.daemonPin !== undefined) daemonPin = String(res.daemonPin).trim();
+      connectWebSocket();
+    });
+  } else {
+    connectWebSocket();
+  }
+}
+
+loadConfigAndConnect();
+
