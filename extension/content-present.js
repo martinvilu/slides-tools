@@ -147,11 +147,13 @@
     const pinBadge = document.createElement("span");
     pinBadge.className = "slide-bridge-pin-badge";
     pinBadge.id = "slide-bridge-pin-badge";
-    pinBadge.textContent = `PIN: ${currentPin}`;
+    pinBadge.title = "Hacé click para configurar o cambiar el PIN";
+    pinBadge.textContent = (currentPin && currentPin !== "----") ? `PIN: ${currentPin}` : "Configurar PIN";
+    pinBadge.onclick = showQrModal;
 
     const qrBtn = document.createElement("button");
     qrBtn.className = "slide-bridge-qr-btn";
-    qrBtn.textContent = "QR";
+    qrBtn.textContent = "QR / PIN";
     qrBtn.onclick = showQrModal;
 
     miniDockElement.appendChild(dot);
@@ -173,7 +175,7 @@
     }
     const pin = document.getElementById("slide-bridge-pin-badge");
     if (pin) {
-      pin.textContent = `PIN: ${currentPin}`;
+      pin.textContent = (currentPin && currentPin !== "----") ? `PIN: ${currentPin}` : "Configurar PIN";
     }
   }
 
@@ -192,7 +194,7 @@
     h3.textContent = "Emparejamiento Remoto";
 
     const pinDesc = document.createElement("p");
-    pinDesc.textContent = "Ingresá el PIN: ";
+    pinDesc.textContent = "PIN actual: ";
     const pinStrong = document.createElement("strong");
     pinStrong.style.color = "#fbbc04";
     pinStrong.style.fontSize = "18px";
@@ -230,19 +232,82 @@
     addRect("65", "65", "15", "15", "#000000");
     box.appendChild(qrSvg);
 
+    // Formulario interactivo para ingresar o cambiar el PIN
+    const pinForm = document.createElement("div");
+    pinForm.className = "slide-bridge-pin-form";
+
+    const pinLabel = document.createElement("label");
+    pinLabel.textContent = "Indicar PIN del Daemon (Obligatorio)";
+
+    const row = document.createElement("div");
+    row.className = "slide-bridge-pin-input-row";
+
+    const pinInput = document.createElement("input");
+    pinInput.type = "text";
+    pinInput.className = "slide-bridge-pin-input";
+    pinInput.placeholder = "Ej: 1234";
+    pinInput.maxLength = 12;
+    pinInput.value = (currentPin && currentPin !== "----") ? currentPin : "";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "slide-bridge-save-pin-btn";
+    saveBtn.textContent = "Guardar PIN";
+
+    const statusMsg = document.createElement("div");
+    statusMsg.className = "slide-bridge-pin-status";
+
+    saveBtn.onclick = () => {
+      const val = pinInput.value.trim();
+      if (!val) {
+        statusMsg.textContent = "Ingresá un PIN válido";
+        statusMsg.className = "slide-bridge-pin-status error";
+        pinInput.focus();
+        return;
+      }
+
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        chrome.storage.sync.set({ daemonPin: val }, () => {
+          currentPin = val;
+          pinStrong.textContent = val;
+          updateMiniDockUI();
+          statusMsg.textContent = "PIN guardado. Reconectando...";
+          statusMsg.className = "slide-bridge-pin-status success";
+
+          chrome.runtime.sendMessage({
+            type: "CONFIG_UPDATED",
+            pin: val
+          }).catch(() => {});
+        });
+      } else {
+        currentPin = val;
+        pinStrong.textContent = val;
+        updateMiniDockUI();
+        statusMsg.textContent = "PIN actualizado.";
+        statusMsg.className = "slide-bridge-pin-status success";
+      }
+    };
+
+    row.appendChild(pinInput);
+    row.appendChild(saveBtn);
+    pinForm.appendChild(pinLabel);
+    pinForm.appendChild(row);
+    pinForm.appendChild(statusMsg);
+
     const closeBtn = document.createElement("button");
     closeBtn.className = "slide-bridge-close-btn";
     closeBtn.textContent = "Cerrar";
     closeBtn.onclick = () => modalBackdrop.remove();
 
-
     modal.appendChild(h3);
     modal.appendChild(pinDesc);
     modal.appendChild(box);
+    modal.appendChild(pinForm);
     modal.appendChild(closeBtn);
     modalBackdrop.appendChild(modal);
 
     document.body.appendChild(modalBackdrop);
+    pinInput.focus();
   }
 
   // ---------------------------------------------------------------------------

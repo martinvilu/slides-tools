@@ -165,7 +165,9 @@
     const pinBadge = document.createElement("span");
     pinBadge.className = "slide-bridge-pin-badge";
     pinBadge.id = "speaker-bridge-pin";
-    pinBadge.textContent = `PIN: ${currentPin}`;
+    pinBadge.title = "Hacé click para cambiar o indicar el PIN";
+    pinBadge.textContent = (currentPin && currentPin !== "----") ? `PIN: ${currentPin}` : "Configurar PIN";
+    pinBadge.onclick = showSpeakerPinModal;
 
     rightGroup.appendChild(clientsSpan);
     rightGroup.appendChild(pinBadge);
@@ -189,8 +191,97 @@
     }
     const pin = document.getElementById("speaker-bridge-pin");
     if (pin) {
-      pin.textContent = `PIN: ${currentPin}`;
+      pin.textContent = (currentPin && currentPin !== "----") ? `PIN: ${currentPin}` : "Configurar PIN";
     }
+  }
+
+  function showSpeakerPinModal() {
+    let backdrop = document.getElementById("slide-bridge-speaker-pin-modal");
+    if (backdrop) return;
+
+    backdrop = document.createElement("div");
+    backdrop.id = "slide-bridge-speaker-pin-modal";
+    backdrop.className = "slide-bridge-qr-modal-backdrop";
+
+    const modal = document.createElement("div");
+    modal.className = "slide-bridge-qr-modal";
+
+    const h3 = document.createElement("h3");
+    h3.textContent = "Configurar PIN del Daemon";
+
+    const desc = document.createElement("p");
+    desc.style.fontSize = "12px";
+    desc.style.color = "#bdc1c6";
+    desc.textContent = "Ingresá el PIN requerido generado por el daemon para emparejar la extensión.";
+
+    const pinForm = document.createElement("div");
+    pinForm.className = "slide-bridge-pin-form";
+
+    const row = document.createElement("div");
+    row.className = "slide-bridge-pin-input-row";
+
+    const pinInput = document.createElement("input");
+    pinInput.type = "text";
+    pinInput.className = "slide-bridge-pin-input";
+    pinInput.placeholder = "Ej: 1234";
+    pinInput.maxLength = 12;
+    pinInput.value = (currentPin && currentPin !== "----") ? currentPin : "";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "slide-bridge-save-pin-btn";
+    saveBtn.textContent = "Guardar PIN";
+
+    const statusMsg = document.createElement("div");
+    statusMsg.className = "slide-bridge-pin-status";
+
+    saveBtn.onclick = () => {
+      const val = pinInput.value.trim();
+      if (!val) {
+        statusMsg.textContent = "El PIN no puede estar vacío";
+        statusMsg.className = "slide-bridge-pin-status error";
+        pinInput.focus();
+        return;
+      }
+
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        chrome.storage.sync.set({ daemonPin: val }, () => {
+          currentPin = val;
+          updateSpeakerDockUI();
+          statusMsg.textContent = "PIN guardado. Reconectando...";
+          statusMsg.className = "slide-bridge-pin-status success";
+
+          chrome.runtime.sendMessage({
+            type: "CONFIG_UPDATED",
+            pin: val
+          }).catch(() => {});
+        });
+      } else {
+        currentPin = val;
+        updateSpeakerDockUI();
+        statusMsg.textContent = "PIN actualizado.";
+        statusMsg.className = "slide-bridge-pin-status success";
+      }
+    };
+
+    row.appendChild(pinInput);
+    row.appendChild(saveBtn);
+    pinForm.appendChild(row);
+    pinForm.appendChild(statusMsg);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "slide-bridge-close-btn";
+    closeBtn.textContent = "Cerrar";
+    closeBtn.onclick = () => backdrop.remove();
+
+    modal.appendChild(h3);
+    modal.appendChild(desc);
+    modal.appendChild(pinForm);
+    modal.appendChild(closeBtn);
+    backdrop.appendChild(modal);
+
+    document.body.appendChild(backdrop);
+    pinInput.focus();
   }
 
   function setupObservers() {
