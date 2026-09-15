@@ -48,7 +48,7 @@ class SlideDaemon:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8766,
         pin: Optional[str] = None,
         require_pin: bool = True,
@@ -86,6 +86,7 @@ class SlideDaemon:
         self._clients: Dict[Any, ClientSession] = {}
         self._pending_commands: Dict[str, asyncio.Future] = {}
         self._cmd_counter: int = 0
+        self._failed_pin_attempts: Dict[str, list] = {}
 
         # Estado canónico en memoria
         self.state = StateSyncPayload(
@@ -212,8 +213,21 @@ class SlideDaemon:
 
         # 2. Solicitudes de emparejamiento (PAIR_REQUEST)
         if msg.action == Action.PAIR_REQUEST.value:
+            client_ip = session.remote_ip or "127.0.0.1"
+            now = time.time()
+            attempts = [t for t in self._failed_pin_attempts.get(client_ip, []) if now - t < 60]
+            self._failed_pin_attempts[client_ip] = attempts
+
+            if len(attempts) >= 5:
+                logger.warning(f"Intento de emparejamiento bloqueado por rate limit para {client_ip}")
+                err = Message.error("Demasiados intentos fallidos de PIN. Intente nuevamente más tarde.", ErrorCode.ERR_INVALID_PIN)
+                await websocket.send(err.to_json())
+                return
+
             req_pin = str(msg.payload.get("pin", "")).strip()
             if not self.require_pin or req_pin == self.pin:
+                if client_ip in self._failed_pin_attempts:
+                    del self._failed_pin_attempts[client_ip]
                 session.is_paired = True
                 session.device_type = str(msg.payload.get("deviceType", "android"))
                 session.client_name = str(msg.payload.get("clientName", "Dispositivo"))
@@ -229,6 +243,8 @@ class SlideDaemon:
                 await websocket.send(ack.to_json())
                 await self._broadcast_state()
             else:
+                self._failed_pin_attempts.setdefault(client_ip, []).append(now)
+                await asyncio.sleep(1.0)
                 err = Message.error("PIN de emparejamiento incorrecto.", ErrorCode.ERR_INVALID_PIN)
                 await websocket.send(err.to_json())
             return

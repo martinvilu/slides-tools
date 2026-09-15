@@ -27,7 +27,7 @@ console = Console()
 
 @app.command()
 def daemon(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Dirección IP de escucha"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Dirección IP de escucha (127.0.0.1 por defecto; 0.0.0.0 para LAN)"),
     port: int = typer.Option(8766, "--port", "-p", help="Puerto TCP WebSocket"),
     pin: Optional[str] = typer.Option(None, "--pin", help="PIN de 4 dígitos fijo (si se omite, se genera aleatorio)"),
     no_pin: bool = typer.Option(False, "--no-pin", help="Desactivar requerimiento de PIN (modo permisivo)"),

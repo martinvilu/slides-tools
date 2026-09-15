@@ -138,3 +138,25 @@ async def test_fallback_timer_control(daemon_fixture):
         await client.send(Message.command(Action.TIMER_RESET).to_json())
         msg1 = Message.from_json(await asyncio.wait_for(client.recv(), timeout=2.0))
         assert msg1.action in (Action.COMMAND_ACK.value, Action.STATE_SYNC.value)
+
+
+@pytest.mark.asyncio
+async def test_daemon_pin_rate_limiting(daemon_fixture):
+    daemon, uri = daemon_fixture
+
+    async with connect(uri, proxy=None) as client:
+        await client.recv()  # drain initial state
+        # Send 5 incorrect PIN attempts
+        for i in range(5):
+            bad_req = Message.command(Action.PAIR_REQUEST, {"pin": f"000{i}"})
+            await client.send(bad_req.to_json())
+            resp = Message.from_json(await asyncio.wait_for(client.recv(), timeout=3.0))
+            assert resp.type == MessageType.ERROR
+            assert resp.payload["code"] == ErrorCode.ERR_INVALID_PIN.value
+
+        # 6th attempt: should be blocked by rate limit
+        bad_req = Message.command(Action.PAIR_REQUEST, {"pin": "4821"})
+        await client.send(bad_req.to_json())
+        blocked_resp = Message.from_json(await asyncio.wait_for(client.recv(), timeout=2.0))
+        assert blocked_resp.type == MessageType.ERROR
+        assert "Demasiados intentos" in blocked_resp.payload["reason"]
