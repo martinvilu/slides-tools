@@ -66,3 +66,16 @@ def test_cli_command_with_correct_pin(thread_daemon):
     res = runner.invoke(app, ["timer-reset", "--uri", uri, "--pin", "1234"])
     assert res.exit_code == 0
     assert "Comando ejecutado" in res.stdout
+
+
+def test_cli_doctor():
+    res = runner.invoke(app, ["doctor"])
+    assert res.exit_code == 0
+    assert "Diagnóstico del Entorno SLIDE-TOOLS" in res.stdout
+
+    res_json = runner.invoke(app, ["doctor", "--json"])
+    assert res_json.exit_code == 0
+    assert '"schema_version": "1.0.0"' in res_json.stdout
+    assert '"herramienta": "slide-tools"' in res_json.stdout
+    assert '"ok": true' in res_json.stdout
+
