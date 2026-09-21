@@ -136,6 +136,26 @@ uv run slide-tools mock-slides --slides 20
 
 ---
 
+## 🔗 Consumidores e integración con cyberdeck
+
+**Estado real: especificación, no verificado contra un cliente.** El consumidor
+declarado, `cyberdeck` (app Android), existe solo como especificación
+(`cyberdeck/android-spec.md`, que lo lista contra `slide-tools (ws:8766)`); no hay
+cliente implementado ni prueba de integración con este daemon. No se invoca a
+ninguna otra herramienta del ecosistema desde aquí.
+
+Lo que este repo sí garantiza (fijado en `tests/test_contrato_cyberdeck.py`):
+
+- Puerto por defecto del daemon: `8766`.
+- Servicio mDNS publicado: `_slide-bridge._tcp.local.` (propiedad `service=slides`). La spec
+  de cyberdeck describe `_slide-bridge._sub._bridge-remote._tcp.local.`: **esa forma con
+  subtipo no está implementada**; un cliente debe descubrir por el tipo plano.
+- URI de emparejamiento `bridge://pair?v=1.3&host=…&port=8766&service=slides&pin=…&name=…`.
+- Salida `--json` versionada (`schema_version`) en `status` y `monitor` para
+  consumidores externos que no hablen WebSocket.
+
+---
+
 ## 📡 Protocolo JSON v1.2
 
 Estructura de paquete estándar:
