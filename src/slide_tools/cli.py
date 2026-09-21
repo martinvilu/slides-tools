@@ -21,6 +21,18 @@ from slide_tools.protocol import (
     TimerData,
 )
 
+
+JSON_SCHEMA_VERSION = "1.0.0"
+
+
+def _emit_json(datos: dict, err: bool = False) -> None:
+    """Una línea JSON con `schema_version` y `herramienta` (contrato para consumidores externos)."""
+    import json
+    import sys
+
+    payload = {"schema_version": JSON_SCHEMA_VERSION, "herramienta": "slide-tools", **datos}
+    print(json.dumps(payload, ensure_ascii=False), file=sys.stderr if err else sys.stdout, flush=True)
+
 app = typer.Typer(help="Sistema de control remoto para Google Slides.", no_args_is_help=True)
 console = Console()
 
@@ -126,12 +138,16 @@ def _send_cmd_helper(
 @app.command()
 def status(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u", help="URI del daemon"),
+    json_output: bool = typer.Option(False, "--json", help="Emitir el estado como JSON versionado (sin Rich)."),
 ):
     """Muestra el estado consolidado de la presentación activa."""
     async def _run():
         try:
             async with SlideClient(uri=uri) as client:
                 st = await client.get_state()
+                if json_output:
+                    _emit_json({"estado": st.model_dump()})
+                    return
                 table = Table(title="Estado de Google Slides", border_style="cyan")
                 table.add_column("Parámetro", style="bold white")
                 table.add_column("Valor", style="bold")
@@ -154,6 +170,9 @@ def status(
 
                 console.print(table)
         except Exception as e:
+            if json_output:
+                _emit_json({"error": str(e)}, err=True)
+                raise typer.Exit(1)
             console.print(f"[bold red]Error conectando con {uri}:[/bold red] {e}")
 
     asyncio.run(_run())
@@ -254,15 +273,20 @@ def timer_pause(
 def monitor(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    json_output: bool = typer.Option(False, "--json", help="Emitir cada evento como una línea JSON (NDJSON) versionada."),
 ):
     """Monitorea en tiempo real cambios de diapositiva, notas y cronómetro."""
     async def _run():
-        console.print(f"[cyan]Conectando a {uri} para monitoreo continuo... (Ctrl+C para salir)[/cyan]")
+        if not json_output:
+            console.print(f"[cyan]Conectando a {uri} para monitoreo continuo... (Ctrl+C para salir)[/cyan]")
         try:
             async with SlideClient(uri=uri, pin=pin) as client:
                 if pin:
                     await client.pair(pin)
                 async for msg in client.listen_events():
+                    if json_output:
+                        _emit_json({"evento": msg.action, "payload": msg.payload})
+                        continue
                     if msg.action == Action.STATE_SYNC.value:
                         p = msg.payload
                         timer = p.get("timer", {})
@@ -279,6 +303,9 @@ def monitor(
         except KeyboardInterrupt:
             console.print("\n[yellow]Monitoreo finalizado.[/yellow]")
         except Exception as e:
+            if json_output:
+                _emit_json({"error": str(e)}, err=True)
+                raise typer.Exit(1)
             console.print(f"[bold red]Error durante monitoreo:[/bold red] {e}")
 
     asyncio.run(_run())
