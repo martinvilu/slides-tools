@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import secrets
 import time
 from typing import Any, Dict, Optional, Set
 import websockets
@@ -27,6 +28,17 @@ from slide_tools.protocol import (
     StateSyncPayload,
     TimerData,
 )
+
+
+def generar_pin() -> str:
+    """PIN de emparejamiento de 6 dígitos con un generador criptográfico.
+
+    Antes era de 4 dígitos con `random.randint`, que no es apto para
+    secretos (N-MEET-02). La extensión y cyberdeck aceptan de 4 a 12
+    caracteres.
+    """
+    return f"{secrets.randbelow(900_000) + 100_000}"
+
 
 logger = logging.getLogger("slide_tools.daemon")
 
@@ -57,7 +69,7 @@ class SlideDaemon:
     ):
         self.host = host
         self.port = port
-        self.pin = pin or f"{random.randint(1000, 9999)}"
+        self.pin = pin or generar_pin()
         self.require_pin = require_pin
         self.command_timeout = command_timeout
         self.enable_mdns = enable_mdns

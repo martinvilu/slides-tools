@@ -58,7 +58,7 @@ def main_callback(
 def daemon(
     host: str = typer.Option("127.0.0.1", "--host", "-H", help="Dirección IP de escucha (127.0.0.1 por defecto; 0.0.0.0 para LAN)"),
     port: int = typer.Option(8766, "--port", "-p", help="Puerto TCP WebSocket"),
-    pin: Optional[str] = typer.Option(None, "--pin", help="PIN de 4 dígitos fijo (si se omite, se genera aleatorio)"),
+    pin: Optional[str] = typer.Option(None, "--pin", help="PIN fijo (si se omite, se genera uno de 6 dígitos con un generador criptográfico)"),
     no_pin: bool = typer.Option(False, "--no-pin", help="Desactivar requerimiento de PIN (modo permisivo)"),
     no_mdns: bool = typer.Option(False, "--no-mdns", help="Desactivar publicación mDNS/Zeroconf"),
     no_qr: bool = typer.Option(False, "--no-qr", help="Ocultar código QR en la consola"),
