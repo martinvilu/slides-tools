@@ -224,3 +224,38 @@ Opciones:
 Archivos generados en `dist/`:
 - **`slide-bridge-chrome-v1.2.0.zip`**: Manifiesto con `background.service_worker` para Chromium.
 - **`slide-bridge-firefox-v1.2.0.xpi`**: Manifiesto con `background.scripts` y `browser_specific_settings.gecko` para Firefox MV3.
+
+<!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
+
+## Referencia rápida
+
+### Requisitos
+
+- Python ≥ 3.11 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+### Comandos
+
+| Comando | Descripción |
+|:--|:--|
+| `slide-tools daemon` | Inicia el daemon concentrador WebSocket en primer plano. |
+| `slide-tools status` | Muestra el estado consolidado de la presentación activa. |
+| `slide-tools next` | Avanza a la siguiente diapositiva o animación (NEXT_SLIDE). |
+| `slide-tools prev` | Retrocede a la diapositiva o animación anterior (PREV_SLIDE). |
+| `slide-tools first` | Salta a la primera diapositiva (FIRST_SLIDE). |
+| `slide-tools last` | Salta a la última diapositiva (LAST_SLIDE). |
+| `slide-tools goto` | Salta directamente a una diapositiva específica (GO_TO_SLIDE). |
+| `slide-tools blackout` | Conmuta pantalla en negro (TOGGLE_BLACKOUT). |
+| `slide-tools whiteout` | Conmuta pantalla en blanco (TOGGLE_WHITEOUT). |
+| `slide-tools laser` | Conmuta puntero láser virtual (TOGGLE_LASER). |
+| `slide-tools timer-reset` | Reinicia el temporizador (TIMER_RESET). |
+| `slide-tools timer-pause` | Pausa o reanuda el temporizador (TIMER_TOGGLE_PAUSE). |
+| `slide-tools monitor` | Monitorea en tiempo real cambios de diapositiva, notas y cronómetro. |
+| `slide-tools mock-slides` | Simula una sesión de Google Slides conectada al daemon para pruebas. |
+| `slide-tools pack` | Empaqueta la extensión WebExtensions para Chrome (.zip) y Firefox (.xpi). |
+| `slide-tools sign` | Valida y firma digitalmente el addon para Firefox utilizando Mozilla web-ext. |
+| `slide-tools qr` | Muestra el código QR para emparejamiento directo con la app Android. |
+| `slide-tools doctor` | Verifica el estado del entorno de SLIDE-TOOLS (Python, web-ext opcional). |
+
+Ayuda de cada comando: `slide-tools <comando> -h`.
+
+<!-- p1:referencia:fin -->
