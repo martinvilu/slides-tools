@@ -7,7 +7,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 import typer
+from yutani.cli import crear_app
 
+from slide_tools import __version__
 from slide_tools.client import SlideClient
 from slide_tools.daemon import SlideDaemon
 from slide_tools.protocol import (
@@ -33,25 +35,14 @@ def _emit_json(datos: dict, err: bool = False) -> None:
     payload = {"schema_version": JSON_SCHEMA_VERSION, "herramienta": "slide-tools", **datos}
     print(json.dumps(payload, ensure_ascii=False), file=sys.stderr if err else sys.stdout, flush=True)
 
-app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]}, help="Sistema de control remoto para Google Slides.", no_args_is_help=True)
+# Contrato de línea de comandos del ecosistema (-h/--help, --version/-v, errores de datos como
+# mensajes) y textos de Typer en español, desde yutani (N-ECO-14).
+app = crear_app(
+    "slide-tools",
+    __version__,
+    "Sistema de control remoto para Google Slides.",
+)
 console = Console()
-
-
-def _version_callback(value: bool) -> None:
-    if value:
-        from slide_tools import __version__
-        console.print(f"[bold cyan]SLIDE[/bold cyan] versión [bold]{__version__}[/bold]")
-        raise typer.Exit(code=0)
-
-
-@app.callback()
-def main_callback(
-    version: Optional[bool] = typer.Option(
-        None, "--version", "-v", help="Muestra la versión y termina.",
-        callback=_version_callback, is_eager=True,
-    ),
-) -> None:
-    """Opciones globales."""
 
 
 @app.command()
