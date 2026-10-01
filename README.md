@@ -225,6 +225,16 @@ Archivos generados en `dist/`:
 - **`slide-bridge-chrome-v1.2.0.zip`**: Manifiesto con `background.service_worker` para Chromium.
 - **`slide-bridge-firefox-v1.2.0.xpi`**: Manifiesto con `background.scripts` y `browser_specific_settings.gecko` para Firefox MV3.
 
+## Limitaciones
+
+- Solo Google Slides (`docs.google.com/presentation`) en un navegador con la extensión cargada
+  (Chrome, Chromium, Brave, Edge o Firefox).
+- La extensión controla la presentación a través de la página (su content script maneja el DOM de
+  Slides): un cambio en la interfaz de Google puede dejar sin efecto algún comando hasta que se
+  actualice la extensión.
+- Los dispositivos se conectan al daemon por WebSocket dentro de la red local: no hay un servidor en
+  internet.
+
 <!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
 
 ## Referencia rápida
@@ -257,5 +267,17 @@ Archivos generados en `dist/`:
 | `slide-tools doctor` | Verifica el estado del entorno de SLIDE-TOOLS (Python, web-ext opcional). |
 
 Ayuda de cada comando: `slide-tools <comando> -h`.
+
+### Salida JSON
+
+Con `--json`, estos comandos emiten el resultado como JSON por la salida estándar, para usarlo desde scripts, ripley o dredd: `slide-tools status`, `slide-tools monitor`, `slide-tools doctor`. El de `doctor --json` lleva `schema_version` y `ok`.
+
+### Códigos de salida
+
+| Código | Significado |
+|:--|:--|
+| `0` | Terminó bien (en `doctor`: está todo lo requerido). |
+| `1` | El comando encontró problemas (hallazgos, pruebas que fallan, un umbral que no se alcanza) o un dato no se pudo usar (un archivo ilegible, un formato inválido). |
+| `2` | Error de uso: comando, opción o argumento inválido. |
 
 <!-- p1:referencia:fin -->
