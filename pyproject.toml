@@ -52,9 +52,9 @@ allow-direct-references = true
 packages = ["src/slide_tools"]
 
 [project.urls]
-Homepage = "https://github.com/INGCOM-UNRN-P1/slide-tools"
-Repository = "https://github.com/INGCOM-UNRN-P1/slide-tools.git"
-Issues = "https://github.com/INGCOM-UNRN-P1/slide-tools/issues"
+Homepage = "https://github.com/martinvilu/slides-tools"
+Repository = "https://github.com/martinvilu/slides-tools.git"
+Issues = "https://github.com/martinvilu/slides-tools/issues"
 
 [dependency-groups]
 dev = [
