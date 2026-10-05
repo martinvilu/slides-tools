@@ -6,7 +6,19 @@
 let daemonHost = "127.0.0.1";
 let daemonPort = 8766;
 let daemonPin = "";
-const RECONNECT_INTERVAL_MS = 3000;
+// Reconexión con espera exponencial (QoL #608): 1 s, 2 s, 4 s… hasta 30 s, con un poco de azar
+// para no reintentar todos a la vez cuando vuelve la red del aula.
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+let reconnectAttempts = 0;
+
+function scheduleReconnect() {
+  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * 2 ** reconnectAttempts);
+  const delay = Math.round(base * (0.5 + Math.random() / 2));
+  reconnectAttempts += 1;
+  console.log(`[SlideBridge] Reconectando en ${Math.ceil(delay / 1000)} s (intento ${reconnectAttempts}).`);
+  setTimeout(connectWebSocket, delay);
+}
 
 let ws = null;
 let isConnected = false;
@@ -38,12 +50,13 @@ function connectWebSocket() {
   try {
     ws = new WebSocket(wsUrl);
   } catch (err) {
-    setTimeout(connectWebSocket, RECONNECT_INTERVAL_MS);
+    scheduleReconnect();
     return;
   }
 
   ws.onopen = () => {
     isConnected = true;
+    reconnectAttempts = 0;
     console.log("[SlideBridge] Conectado al daemon en", wsUrl);
 
     // Enviar solicitud de emparejamiento con PIN obligatorio
@@ -80,7 +93,7 @@ function connectWebSocket() {
     ws = null;
     notifyTabsConnectionStatus(false);
     if (daemonPin) {
-      setTimeout(connectWebSocket, RECONNECT_INTERVAL_MS);
+      scheduleReconnect();
     }
   };
 

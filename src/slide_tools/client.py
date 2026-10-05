@@ -25,8 +25,10 @@ class SlideClient:
         device_type: str = "cli",
         client_name: str = "CLI-Client",
         timeout: float = 3.0,
+        reintentos: int = 3,
     ):
         self.uri = uri
+        self.reintentos = reintentos
         self.pin = pin
         self.device_type = device_type
         self.client_name = client_name
@@ -36,7 +38,17 @@ class SlideClient:
         self.latest_state: Optional[StateSyncPayload] = None
 
     async def connect(self) -> None:
-        self._ws = await connect(self.uri, proxy=None)
+        # Si la red del aula se cae un momento, reintenta con espera exponencial (QoL #608).
+        espera = 0.5
+        for intento in range(self.reintentos + 1):
+            try:
+                self._ws = await connect(self.uri, proxy=None, open_timeout=self.timeout)
+                break
+            except (OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException):
+                if intento == self.reintentos:
+                    raise
+                await asyncio.sleep(espera)
+                espera = min(espera * 2, 8.0)
         try:
             raw_init = await asyncio.wait_for(self._ws.recv(), timeout=self.timeout)
             msg = Message.from_json(raw_init)
