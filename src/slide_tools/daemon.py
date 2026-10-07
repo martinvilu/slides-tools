@@ -302,7 +302,7 @@ class SlideDaemon:
 
             fwd_msg = Message.command(msg.action, payload, source=Source.DAEMON)
             loop = asyncio.get_running_loop()
-            fut: asyncio.Future = loop.create_future()
+            fut = loop.create_future()
             self._pending_commands[req_id] = fut
 
             try:

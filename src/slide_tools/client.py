@@ -49,6 +49,7 @@ class SlideClient:
                     raise
                 await asyncio.sleep(espera)
                 espera = min(espera * 2, 8.0)
+        assert self._ws is not None  # el lazo de arriba conecta o levanta la excepción
         try:
             raw_init = await asyncio.wait_for(self._ws.recv(), timeout=self.timeout)
             msg = Message.from_json(raw_init)
@@ -80,6 +81,7 @@ class SlideClient:
             {"pin": target_pin, "deviceType": self.device_type, "clientName": self.client_name},
             source=Source.CLIENT
         )
+        assert self._ws is not None
         await self._ws.send(req.to_json())
 
         while True:
