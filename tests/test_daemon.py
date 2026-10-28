@@ -18,7 +18,8 @@ from slide_tools.protocol import (
 
 @pytest.fixture
 async def daemon_fixture():
-    daemon = SlideDaemon(host="127.0.0.1", port=0, pin="4821", require_pin=True, command_timeout=1.0)
+    daemon = SlideDaemon(host="127.0.0.1", port=0, pin="4821", require_pin=True, command_timeout=1.0,
+                         confiar_en_local=False)  # simula dispositivos de la red
     await daemon.start()
     port = daemon._server.sockets[0].getsockname()[1]
     uri = f"ws://127.0.0.1:{port}"
@@ -35,7 +36,7 @@ async def test_pairing_required_and_invalid_pin(daemon_fixture):
         init_raw = await asyncio.wait_for(client.recv(), timeout=2.0)
         init_msg = Message.from_json(init_raw)
         assert init_msg.action == Action.STATE_SYNC.value
-        assert init_msg.payload["pin"] == "4821"
+        assert init_msg.payload["pin"] == ""  # el PIN no se le entrega a quien no se emparejó (N-SLIDE-02)
 
         # 2. Intentar comandar sin emparejarse
         await client.send(Message.command(Action.NEXT_SLIDE, source=Source.ANDROID).to_json())
@@ -54,9 +55,13 @@ async def test_pairing_required_and_invalid_pin(daemon_fixture):
 async def test_successful_pairing_and_multiclient_broadcast(daemon_fixture):
     daemon, uri = daemon_fixture
 
-    # Conectar extensión
+    # Conectar extensión: se empareja con el PIN, como la real (background.js)
     async with connect(uri, proxy=None) as ext:
         await ext.recv()  # saludo
+        await ext.send(Message.command(Action.PAIR_REQUEST, {"pin": "4821", "deviceType": "extension"},
+                                       source=Source.EXTENSION).to_json())
+        assert Message.from_json(await ext.recv()).action == Action.PAIRING_SUCCESS.value
+        await ext.recv()  # estado difundido tras el emparejamiento
         # Extensión envía estado de presentación
         ext_state = StateSyncPayload(
             presentationTitle="Arquitectura 2026",

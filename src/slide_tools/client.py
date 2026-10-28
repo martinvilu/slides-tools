@@ -1,9 +1,12 @@
 """Cliente WebSocket para interactuar con SlideDaemon."""
 
 import asyncio
+import os
 from typing import Any, AsyncGenerator, Dict, Optional
 import websockets
 from websockets.asyncio.client import connect
+
+from cast_tools_common.reconexion import con_reintentos
 
 from slide_tools.protocol import (
     Action,
@@ -29,7 +32,10 @@ class SlideClient:
     ):
         self.uri = uri
         self.reintentos = reintentos
-        self.pin = pin
+        # El PIN hace falta sólo contra un daemon de otro equipo: desde el mismo equipo la
+        # conexión es de confianza. Al emparejarse, el daemon devuelve un token de reconexión.
+        self.pin = pin or os.environ.get("SLIDE_TOOLS_PIN") or None
+        self.token: Optional[str] = None
         self.device_type = device_type
         self.client_name = client_name
         self.timeout = timeout
@@ -39,17 +45,12 @@ class SlideClient:
 
     async def connect(self) -> None:
         # Si la red del aula se cae un momento, reintenta con espera exponencial (QoL #608).
-        espera = 0.5
-        for intento in range(self.reintentos + 1):
-            try:
-                self._ws = await connect(self.uri, proxy=None, open_timeout=self.timeout)
-                break
-            except (OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException):
-                if intento == self.reintentos:
-                    raise
-                await asyncio.sleep(espera)
-                espera = min(espera * 2, 8.0)
-        assert self._ws is not None  # el lazo de arriba conecta o levanta la excepción
+        self._ws = await con_reintentos(
+            lambda: connect(self.uri, proxy=None, open_timeout=self.timeout),
+            self.reintentos,
+            errores=(OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException),
+        )
+        assert self._ws is not None
         try:
             raw_init = await asyncio.wait_for(self._ws.recv(), timeout=self.timeout)
             msg = Message.from_json(raw_init)
@@ -71,14 +72,15 @@ class SlideClient:
         await self.close()
 
     async def pair(self, pin: Optional[str] = None) -> bool:
-        """Envía solicitud de emparejamiento con el PIN especificado."""
+        """Se empareja con el PIN indicado o, si no hay, con el token de un emparejamiento anterior."""
         target_pin = pin or self.pin
-        if not target_pin:
+        if not target_pin and not self.token:
             raise ValueError("Se requiere un PIN para emparejarse.")
 
+        credenciales = {"pin": target_pin} if target_pin else {"token": self.token}
         req = Message.command(
             Action.PAIR_REQUEST,
-            {"pin": target_pin, "deviceType": self.device_type, "clientName": self.client_name},
+            {**credenciales, "deviceType": self.device_type, "clientName": self.client_name},
             source=Source.CLIENT
         )
         assert self._ws is not None
@@ -90,6 +92,7 @@ class SlideClient:
 
             if resp.action == Action.PAIRING_SUCCESS.value:
                 self.is_paired = True
+                self.token = resp.payload.get("token") or self.token
                 return True
             elif resp.type == MessageType.ERROR:
                 raise RuntimeError(f"Error de emparejamiento ({resp.payload.get('code')}): {resp.payload.get('reason')}")

@@ -1,14 +1,21 @@
 """Daemon concentrador WebSocket para control de Google Slides con pairing y broadcast multicliente."""
 
 import asyncio
-import json
 import logging
 import random
-import secrets
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional
 import websockets
 from websockets.asyncio.server import Server, serve
+
+from cast_tools_common.seguridad import (
+    LimitadorIntentos,
+    TokensEfimeros,
+    conexion_local_confiable,
+    generar_pin,
+    pin_correcto,
+    rechazar_origen_web,
+)
 
 from slide_tools.discovery import (
     MdnsPublisher,
@@ -30,14 +37,8 @@ from slide_tools.protocol import (
 )
 
 
-def generar_pin() -> str:
-    """PIN de emparejamiento de 6 dígitos con un generador criptográfico.
-
-    Antes era de 4 dígitos con `random.randint`, que no es apto para
-    secretos (N-MEET-02). La extensión y cyberdeck aceptan de 4 a 12
-    caracteres.
-    """
-    return f"{secrets.randbelow(900_000) + 100_000}"
+# generar_pin vive en cast-tools-common (Ola 24); se reexporta para quien lo importaba de acá.
+__all__ = ["ClientSession", "SlideDaemon", "generar_pin"]
 
 
 logger = logging.getLogger("slide_tools.daemon")
@@ -66,8 +67,12 @@ class SlideDaemon:
         require_pin: bool = True,
         command_timeout: float = 2.5,
         enable_mdns: bool = True,
+        confiar_en_local: bool = True,
     ):
+        """`confiar_en_local`: una conexión desde este equipo sin origen web (la CLI, un atajo de
+        teclado, la bandeja, la extensión) no necesita PIN; el PIN protege la red del aula."""
         self.host = host
+        self.confiar_en_local = confiar_en_local
         self.port = port
         self.pin = pin or generar_pin()
         self.require_pin = require_pin
@@ -98,7 +103,8 @@ class SlideDaemon:
         self._clients: Dict[Any, ClientSession] = {}
         self._pending_commands: Dict[str, asyncio.Future] = {}
         self._cmd_counter: int = 0
-        self._failed_pin_attempts: Dict[str, list] = {}
+        self._intentos = LimitadorIntentos()
+        self._tokens = TokensEfimeros()
 
         # Estado canónico en memoria
         self.state = StateSyncPayload(
@@ -128,7 +134,9 @@ class SlideDaemon:
     async def start(self) -> None:
         """Inicia el servidor WebSocket y el servicio mDNS."""
         logger.info(f"Iniciando SlideDaemon en ws://{self.host}:{self.port} (PIN: {self.pin})")
-        self._server = await serve(self._handle_connection, self.host, self.port)
+        # Un WebSocket a 127.0.0.1 lo puede abrir cualquier página: sólo programas y extensiones.
+        self._server = await serve(self._handle_connection, self.host, self.port,
+                                   process_request=rechazar_origen_web)
         self._fallback_timer_task = asyncio.create_task(self._fallback_timer_loop())
         if self._mdns_publisher:
             await self._mdns_publisher.start()
@@ -159,7 +167,7 @@ class SlideDaemon:
             pass
 
         client_id = f"c_{random.randint(10000, 99999)}"
-        is_auto_paired = (remote_ip in ("127.0.0.1", "::1", "localhost") and not self.require_pin)
+        is_auto_paired = not self.require_pin or (self.confiar_en_local and conexion_local_confiable(websocket))
         session = ClientSession(websocket, client_id, remote_ip, is_paired=is_auto_paired)
         self._clients[websocket] = session
 
@@ -196,8 +204,15 @@ class SlideDaemon:
     async def _process_message(self, websocket: Any, session: ClientSession, msg: Message) -> None:
         """Enruta y procesa mensajes según procedencia y estado de pairing."""
 
-        # 1. Mensajes emitidos por la extensión WebExtensions
-        if msg.source == Source.EXTENSION:
+        # 1. Mensajes emitidos por la extensión WebExtensions. Antes bastaba con decir
+        #    `source: extension` para quedar emparejado: ahora la extensión, como cualquier
+        #    cliente, se empareja con el PIN (lo manda en su PAIR_REQUEST) o es local.
+        if msg.source == Source.EXTENSION and not session.is_paired and msg.action != Action.PAIR_REQUEST.value:
+            err = Message.error("Extensión no emparejada: falta el PIN.", ErrorCode.ERR_PAIRING_REQUIRED)
+            await websocket.send(err.to_json())
+            return
+
+        if msg.source == Source.EXTENSION and session.is_paired:
             if self._extension_ws != websocket:
                 self._extension_ws = websocket
                 session.device_type = "extension"
@@ -226,36 +241,37 @@ class SlideDaemon:
         # 2. Solicitudes de emparejamiento (PAIR_REQUEST)
         if msg.action == Action.PAIR_REQUEST.value:
             client_ip = session.remote_ip or "127.0.0.1"
-            now = time.time()
-            attempts = [t for t in self._failed_pin_attempts.get(client_ip, []) if now - t < 60]
-            self._failed_pin_attempts[client_ip] = attempts
 
-            if len(attempts) >= 5:
+            if self._intentos.bloqueada(client_ip):
                 logger.warning(f"Intento de emparejamiento bloqueado por rate limit para {client_ip}")
                 err = Message.error("Demasiados intentos fallidos de PIN. Intente nuevamente más tarde.", ErrorCode.ERR_INVALID_PIN)
                 await websocket.send(err.to_json())
                 return
 
-            req_pin = str(msg.payload.get("pin", "")).strip()
-            if not self.require_pin or req_pin == self.pin:
-                if client_ip in self._failed_pin_attempts:
-                    del self._failed_pin_attempts[client_ip]
+            credenciales_ok = (pin_correcto(msg.payload.get("pin"), self.pin)
+                               or self._tokens.validar(msg.payload.get("token")) is not None)
+            if not self.require_pin or session.is_paired or credenciales_ok:
+                self._intentos.exito(client_ip)
                 session.is_paired = True
                 session.device_type = str(msg.payload.get("deviceType", "android"))
                 session.client_name = str(msg.payload.get("clientName", "Dispositivo"))
                 self.state.connectedClients = self.paired_clients_count
                 logger.info(f"Cliente emparejado: {session.client_name} ({session.device_type})")
 
+                # Token para reconectarse (red que se corta, app que se reabre) sin volver a pedir el PIN.
+                token = self._tokens.emitir(session.client_id)
                 ack = Message(
                     source=Source.DAEMON,
                     type=MessageType.EVENT,
                     action=Action.PAIRING_SUCCESS.value,
-                    payload={"clientId": session.client_id, "deviceType": session.device_type, "status": "ok"}
+                    payload={"clientId": session.client_id, "deviceType": session.device_type, "status": "ok",
+                             "token": token, "expiresIn": int(self._tokens.duracion)}
                 )
                 await websocket.send(ack.to_json())
                 await self._broadcast_state()
             else:
-                self._failed_pin_attempts.setdefault(client_ip, []).append(now)
+                self._intentos.fallo(client_ip)
+                logger.warning("PIN incorrecto desde %s", client_ip)
                 await asyncio.sleep(1.0)
                 err = Message.error("PIN de emparejamiento incorrecto.", ErrorCode.ERR_INVALID_PIN)
                 await websocket.send(err.to_json())
@@ -326,7 +342,13 @@ class SlideDaemon:
                 await websocket.send(err.to_json())
 
     async def _send_state(self, websocket: Any) -> None:
-        msg = Message.state_sync(self.state, source=Source.DAEMON)
+        # El PIN y el QR sólo a quien ya está emparejado (o es local): antes iban en el saludo a
+        # cualquiera que abriera la conexión, y con eso podía emparejarse.
+        sesion = self._clients.get(websocket)
+        estado = self.state
+        if sesion is None or not sesion.is_paired:
+            estado = self.state.model_copy(update={"pin": "", "pairingUri": None, "qrSvg": None})
+        msg = Message.state_sync(estado, source=Source.DAEMON)
         try:
             await websocket.send(msg.to_json())
         except Exception:

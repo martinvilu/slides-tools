@@ -54,11 +54,13 @@ def test_cli_status(thread_daemon):
     assert "1234" in res.stdout
 
 
-def test_cli_command_without_pairing_rejected(thread_daemon):
+def test_cli_local_no_necesita_pin(thread_daemon):
+    """Desde el mismo equipo (un atajo de teclado) no se pide el PIN; el rechazo de un
+    dispositivo de la red sin emparejar está en test_daemon.py (Ola 24)."""
     daemon, uri = thread_daemon
     res = runner.invoke(app, ["next", "--uri", uri])
     assert res.exit_code == 0
-    assert "ERR_PAIRING_REQUIRED" in res.stdout
+    assert "ERR_PAIRING_REQUIRED" not in res.stdout and "ERR_NOT_PRESENTING" in res.stdout
 
 
 def test_cli_command_with_correct_pin(thread_daemon):
