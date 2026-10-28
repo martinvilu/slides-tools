@@ -4,7 +4,12 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/);
 versiones según [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [1.3.1] - 2026-10-28
+
+### Corregido
+
+- La extensión no se conectaba al daemon en Firefox: sin `content_security_policy`, Firefox aplica a las extensiones Manifest V3 un CSP con `upgrade-insecure-requests` que convierte `ws://127.0.0.1:8766` en `wss://`, y el daemon no habla TLS (sólo registraba «connection closed»). El manifest declara el CSP sin esa directiva. Reproducido y verificado con Firefox 158.
+
 
 ### Seguridad
 
