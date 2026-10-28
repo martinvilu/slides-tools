@@ -20,8 +20,13 @@ def test_atajos_fuera_de_gnome(monkeypatch):
 
 
 def test_los_comandos_de_los_atajos_aceptan_notificar():
+    # Por los parámetros y no por el texto de --help: en GitHub Actions Rich lo colorea y los
+    # códigos ANSI parten «--notificar».
+    import typer
+
+    comandos = typer.main.get_command(app).commands
     for sub in ("next", "prev", "blackout", "timer-pause", "timer-reset"):
-        assert "--notificar" in CliRunner().invoke(app, [sub, "--help"]).output
+        assert any("--notificar" in p.opts for p in comandos[sub].params), sub
 
 
 def test_estado_para_la_bandeja():
