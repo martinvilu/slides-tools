@@ -113,28 +113,73 @@ Opciones:
 # Ver estado consolidado de la presentación
 uv run slide-tools status
 
-# Navegación básica (requiere --pin <PIN> si el daemon lo solicita)
-uv run slide-tools next --pin 4821         # Siguiente diapositiva o animación
-uv run slide-tools prev --pin 4821         # Diapositiva anterior
-uv run slide-tools first --pin 4821        # Primera diapositiva
-uv run slide-tools last --pin 4821         # Última diapositiva
-uv run slide-tools goto 14 --pin 4821      # Saltar a la diapositiva 14
+# Navegación básica (desde el mismo equipo no hace falta el PIN; contra un daemon de otro
+# equipo, --pin <PIN> o la variable SLIDE_TOOLS_PIN)
+uv run slide-tools next                    # Siguiente diapositiva o animación
+uv run slide-tools prev                    # Diapositiva anterior
+uv run slide-tools first                   # Primera diapositiva
+uv run slide-tools last                    # Última diapositiva
+uv run slide-tools goto 14                 # Saltar a la diapositiva 14
 
 # Efectos visuales de presentación
-uv run slide-tools blackout --pin 4821     # Conmutar pantalla en negro (tecla b)
-uv run slide-tools whiteout --pin 4821     # Conmutar pantalla en blanco (tecla w)
-uv run slide-tools laser --pin 4821        # Conmutar puntero láser virtual (tecla l)
+uv run slide-tools blackout                # Conmutar pantalla en negro (tecla b)
+uv run slide-tools whiteout                # Conmutar pantalla en blanco (tecla w)
+uv run slide-tools laser                   # Conmutar puntero láser virtual (tecla l)
 
 # Control del cronómetro
-uv run slide-tools timer-reset --pin 4821  # Reiniciar temporizador
-uv run slide-tools timer-pause --pin 4821  # Pausar o reanudar cronómetro
+uv run slide-tools timer-reset             # Reiniciar temporizador
+uv run slide-tools timer-pause             # Pausar o reanudar cronómetro
 
 # Monitoreo continuo de eventos y notas en terminal
-uv run slide-tools monitor --pin 4821
+uv run slide-tools monitor
 
 # Simular presentación para pruebas de hardware / app móvil sin navegador
 uv run slide-tools mock-slides --slides 20
 ```
+
+### Atajos de teclado globales
+
+```bash
+slide-tools atajos              # muestra los atajos y si están instalados
+slide-tools atajos --instalar   # los registra en GNOME (Configuración → Teclado)
+slide-tools atajos --quitar
+```
+
+| Atajo | Acción |
+|:--|:--|
+| Ctrl+Alt+AvPág | siguiente |
+| Ctrl+Alt+RePág | anterior |
+| Ctrl+Alt+B | pantalla en negro |
+| Ctrl+Alt+P | pausar o reanudar el temporizador |
+| Ctrl+Alt+R | reiniciar el temporizador |
+
+Funcionan con cualquier ventana enfocada (la terminal, Meet): cada atajo es un atajo del
+escritorio que corre `slide-tools <comando> --notificar`, que avisa con una notificación si algo
+falla. Fuera de GNOME, `slide-tools atajos` muestra los comandos para cargarlos a mano.
+
+### Indicador en la bandeja y registro
+
+`slide-tools bandeja` muestra un círculo verde (presentando), amarillo (daemon sin presentación) o
+gris (sin daemon). Necesita pystray: `uv tool install --with pystray --with pillow …`, y en GNOME
+la extensión «AppIndicator and KStatusNotifierItem Support». Sin pystray avisa cada cambio con una
+notificación de escritorio.
+
+El daemon registra conexiones, emparejamientos y PIN rechazados en `~/.local/state/p1/cast.log`
+(rotativo, compartido con meet-tools).
+
+### Seguridad del emparejamiento
+
+- **El PIN protege la red del aula.** Una conexión desde el mismo equipo sin origen web (la CLI,
+  un atajo, la bandeja, la extensión) no lo necesita; un dispositivo de la red, y la extensión si
+  el daemon está en otro equipo, se emparejan con `PAIR_REQUEST`.
+- **Decir que se es la extensión no empareja**: la extensión se empareja con el PIN como cualquier
+  cliente (lo manda en su `PAIR_REQUEST`).
+- **Token de reconexión.** `PAIRING_SUCCESS` trae `token` y `expiresIn` (8 h); un `PAIR_REQUEST`
+  con `{"token": …}` reemplaza al PIN. Viven en memoria: reiniciar el daemon los invalida.
+- **Ninguna página web puede conectarse**: 403 a todo WebSocket con `Origin` de una página.
+- **El PIN y el QR sólo a quien ya está emparejado**: en el saludo a un dispositivo sin emparejar
+  `pin` llega vacío.
+- Cinco PIN equivocados en un minuto bloquean esa IP.
 
 ---
 
@@ -265,6 +310,8 @@ Archivos generados en `dist/`:
 | `slide-tools sign` | Valida y firma digitalmente el addon para Firefox utilizando Mozilla web-ext. |
 | `slide-tools qr` | Muestra el código QR para emparejamiento directo con la app Android. |
 | `slide-tools doctor` | Verifica el estado del entorno de SLIDE-TOOLS (Python, web-ext opcional). |
+| `slide-tools atajos` | Atajos de teclado globales: avanzar, retroceder, pantalla en negro y temporizador. |
+| `slide-tools bandeja` | Indicador en la bandeja del sistema: verde presentando, amarillo sin presentación, gris sin daemon. |
 
 Ayuda de cada comando: `slide-tools <comando> -h`.
 
