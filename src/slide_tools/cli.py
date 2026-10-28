@@ -1,7 +1,6 @@
 """Interfaz de línea de comandos (CLI) para slide-tools."""
 
 import asyncio
-import logging
 from typing import Optional
 from rich.console import Console
 from rich.panel import Panel
@@ -55,11 +54,14 @@ def daemon(
     no_qr: bool = typer.Option(False, "--no-qr", help="Ocultar código QR en la consola"),
     timeout: float = typer.Option(2.5, "--timeout", "-t", help="Timeout de respuesta de extensión"),
 ):
-    """Inicia el daemon concentrador WebSocket en primer plano."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    )
+    """Inicia el daemon concentrador WebSocket en primer plano.
+
+    Además de la terminal, registra conexiones, emparejamientos y PIN rechazados en
+    `~/.local/state/p1/cast.log` (rotativo, compartido con meet-tools).
+    """
+    from cast_tools_common.registro import configurar_registro
+
+    ruta_log = configurar_registro("slide-tools")
 
     server = SlideDaemon(
         host=host,
@@ -77,7 +79,8 @@ def daemon(
         f"PIN de Emparejamiento: [bold yellow]{server.pin}[/bold yellow] {'(Opcional)' if no_pin else '(Requerido)'}\n"
         f"Descubrimiento mDNS: {mdns_info}\n"
         f"Conexión LAN: [dim]ws://{server.lan_ip}:{port}[/dim]\n"
-        f"URI Emparejamiento: [cyan]{server.pairing_uri}[/cyan]",
+        f"URI Emparejamiento: [cyan]{server.pairing_uri}[/cyan]\n"
+        f"Registro: [dim]{ruta_log or 'sólo en la terminal'}[/dim]",
         border_style="cyan"
     ))
 
@@ -102,26 +105,38 @@ def daemon(
         console.print("\n[yellow]Daemon detenido por el usuario.[/yellow]")
 
 
+def _avisar(texto: str) -> None:
+    """Un atajo de teclado no tiene terminal: el error se muestra como notificación."""
+    from cast_tools_common.bandeja import Estado, notificar
+
+    notificar("slide-tools", Estado("sin_navegador", texto))
+
+
 def _send_cmd_helper(
     action: Action,
     uri: str = "ws://127.0.0.1:8766",
     pin: Optional[str] = None,
-    payload: Optional[dict] = None
+    payload: Optional[dict] = None,
+    notificar: bool = False,
 ) -> None:
     async def _run():
         try:
             async with SlideClient(uri=uri, pin=pin) as client:
-                if pin:
-                    await client.pair(pin)
+                if client.pin:
+                    await client.pair()
                 resp = await client.send_command(action, payload or {})
                 if resp.type == MessageType.ACK:
                     console.print(f"[bold green]✓ Comando ejecutado:[/bold green] {action.value}")
                 elif resp.type == MessageType.ERROR:
                     console.print(f"[bold red]✗ Error ({resp.payload.get('code')}):[/bold red] {resp.payload.get('reason')}")
+                    if notificar:
+                        _avisar(str(resp.payload.get("reason")))
                 else:
                     console.print(f"[cyan]Respuesta:[/cyan] {resp.action} {resp.payload}")
         except Exception as e:
             console.print(f"[bold red]Error comunicando con daemon en {uri}:[/bold red] {e}")
+            if notificar:
+                _avisar(f"No responde el daemon en {uri}: ¿está corriendo `slide-tools daemon`?")
 
     asyncio.run(_run())
 
@@ -173,18 +188,20 @@ def status(
 def next(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    notificar: bool = typer.Option(False, "--notificar", help="Avisar los errores con una notificación (para atajos de teclado)."),
 ):
     """Avanza a la siguiente diapositiva o animación (NEXT_SLIDE)."""
-    _send_cmd_helper(Action.NEXT_SLIDE, uri=uri, pin=pin)
+    _send_cmd_helper(Action.NEXT_SLIDE, uri=uri, pin=pin, notificar=notificar)
 
 
 @app.command()
 def prev(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    notificar: bool = typer.Option(False, "--notificar", help="Avisar los errores con una notificación (para atajos de teclado)."),
 ):
     """Retrocede a la diapositiva o animación anterior (PREV_SLIDE)."""
-    _send_cmd_helper(Action.PREV_SLIDE, uri=uri, pin=pin)
+    _send_cmd_helper(Action.PREV_SLIDE, uri=uri, pin=pin, notificar=notificar)
 
 
 @app.command()
@@ -219,9 +236,10 @@ def goto(
 def blackout(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    notificar: bool = typer.Option(False, "--notificar", help="Avisar los errores con una notificación (para atajos de teclado)."),
 ):
     """Conmuta pantalla en negro (TOGGLE_BLACKOUT)."""
-    _send_cmd_helper(Action.TOGGLE_BLACKOUT, uri=uri, pin=pin)
+    _send_cmd_helper(Action.TOGGLE_BLACKOUT, uri=uri, pin=pin, notificar=notificar)
 
 
 @app.command()
@@ -246,18 +264,20 @@ def laser(
 def timer_reset(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    notificar: bool = typer.Option(False, "--notificar", help="Avisar los errores con una notificación (para atajos de teclado)."),
 ):
     """Reinicia el temporizador (TIMER_RESET)."""
-    _send_cmd_helper(Action.TIMER_RESET, uri=uri, pin=pin)
+    _send_cmd_helper(Action.TIMER_RESET, uri=uri, pin=pin, notificar=notificar)
 
 
 @app.command("timer-pause")
 def timer_pause(
     uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u"),
     pin: Optional[str] = typer.Option(None, "--pin", "-k"),
+    notificar: bool = typer.Option(False, "--notificar", help="Avisar los errores con una notificación (para atajos de teclado)."),
 ):
     """Pausa o reanuda el temporizador (TIMER_TOGGLE_PAUSE)."""
-    _send_cmd_helper(Action.TIMER_TOGGLE_PAUSE, uri=uri, pin=pin)
+    _send_cmd_helper(Action.TIMER_TOGGLE_PAUSE, uri=uri, pin=pin, notificar=notificar)
 
 
 @app.command()
@@ -272,8 +292,8 @@ def monitor(
             console.print(f"[cyan]Conectando a {uri} para monitoreo continuo... (Ctrl+C para salir)[/cyan]")
         try:
             async with SlideClient(uri=uri, pin=pin) as client:
-                if pin:
-                    await client.pair(pin)
+                if client.pin:
+                    await client.pair()
                 async for msg in client.listen_events():
                     if json_output:
                         _emit_json({"evento": msg.action, "payload": msg.payload})
@@ -491,6 +511,69 @@ def doctor_cmd(
     console.print(tabla)
     if not todo_ok:
         raise typer.Exit(code=1)
+
+
+_ATAJOS = [
+    # (subcomando, nombre en GNOME, combinación). Ctrl+Alt: no choca con GNOME ni con Meet.
+    ("next", "Slides: siguiente", "<Control><Alt>Page_Down"),
+    ("prev", "Slides: anterior", "<Control><Alt>Page_Up"),
+    ("blackout", "Slides: pantalla en negro", "<Control><Alt>b"),
+    ("timer-pause", "Slides: pausar el temporizador", "<Control><Alt>p"),
+    ("timer-reset", "Slides: reiniciar el temporizador", "<Control><Alt>r"),
+]
+
+
+def atajos_de_slides(uri: str = "ws://127.0.0.1:8766") -> list:
+    from cast_tools_common.atajos import Atajo, comando_de
+
+    return [Atajo(f"p1-slides-{sub}", nombre, comando_de("slide-tools", sub, "--uri", uri, "--notificar"), combinacion)
+            for sub, nombre, combinacion in _ATAJOS]
+
+
+@app.command("atajos")
+def atajos_cmd(
+    instalar: bool = typer.Option(False, "--instalar", help="Registrarlos como atajos personalizados de GNOME."),
+    quitar: bool = typer.Option(False, "--quitar", help="Quitar los atajos de slide-tools de GNOME."),
+    uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u", help="URI del daemon que van a usar los atajos."),
+):
+    """Atajos de teclado globales: avanzar, retroceder, pantalla en negro y temporizador.
+
+    Funcionan con cualquier ventana enfocada: cada atajo corre `slide-tools <comando>
+    --notificar`, que avisa con una notificación si algo falla. En GNOME se instalan con
+    --instalar; en otros escritorios se muestran para cargarlos a mano.
+    """
+    from cast_tools_common.atajos import gestionar
+
+    if instalar and quitar:
+        raise typer.BadParameter("--instalar y --quitar no van juntos.")
+    accion = "instalar" if instalar else ("quitar" if quitar else "mostrar")
+    for linea in gestionar(atajos_de_slides(uri), "p1-slides-", accion):
+        console.print(linea, markup=False, highlight=False)
+
+
+def evaluar_estado_slides(payload: dict) -> tuple:
+    """Para la bandeja: (navegador presentando, texto)."""
+    if payload.get("isPresenting"):
+        return True, (f"Presentando «{payload.get('presentationTitle', '')}» "
+                      f"({payload.get('currentSlide', '?')}/{payload.get('totalSlides', '?')})")
+    return False, "Daemon activo, sin presentación en el navegador"
+
+
+@app.command("bandeja")
+def bandeja_cmd(
+    uri: str = typer.Option("ws://127.0.0.1:8766", "--uri", "-u", help="URI del daemon."),
+    notificaciones: bool = typer.Option(False, "--notificaciones", help="Avisar con notificaciones aunque esté pystray."),
+):
+    """Indicador en la bandeja del sistema: verde presentando, amarillo sin presentación, gris sin daemon.
+
+    Usa pystray (extra `bandeja` de cast-tools-common; en GNOME, con la extensión AppIndicator).
+    Sin pystray, avisa cada cambio con una notificación de escritorio.
+    """
+    from cast_tools_common.bandeja import correr
+    from cast_tools_common.registro import configurar_registro
+
+    configurar_registro("slide-tools", terminal=False)
+    correr("slide-tools", uri, evaluar_estado_slides, forzar_notificaciones=notificaciones)
 
 
 def main():
