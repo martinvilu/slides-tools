@@ -52,7 +52,7 @@ def daemon(
     no_pin: bool = typer.Option(False, "--no-pin", help="Desactivar requerimiento de PIN (modo permisivo)"),
     no_mdns: bool = typer.Option(False, "--no-mdns", help="Desactivar publicación mDNS/Zeroconf"),
     no_qr: bool = typer.Option(False, "--no-qr", help="Ocultar código QR en la consola"),
-    timeout: float = typer.Option(2.5, "--timeout", "-t", help="Timeout de respuesta de extensión"),
+    timeout: float = typer.Option(2.5, "--timeout", "-t", help="Tiempo límite de respuesta de la extensión"),
 ):
     """Inicia el daemon concentrador WebSocket en primer plano.
 

@@ -74,7 +74,7 @@ Inicia el daemon concentrador WebSocket en primer plano.
 | `--no-pin` | `<class 'bool'>` | `False` | Desactivar requerimiento de PIN (modo permisivo) |
 | `--no-mdns` | `<class 'bool'>` | `False` | Desactivar publicación mDNS/Zeroconf |
 | `--no-qr` | `<class 'bool'>` | `False` | Ocultar código QR en la consola |
-| `--timeout`, `-t` | `<class 'float'>` | `2.5` | Timeout de respuesta de extensión |
+| `--timeout`, `-t` | `<class 'float'>` | `2.5` | Tiempo límite de respuesta de la extensión |
 
 #### Ejemplo de Invocación
 ```bash
